@@ -3,6 +3,7 @@ name: Stock Volume Alert
 on:
   schedule:
     - cron: '0 * * * 1-5'
+  workflow_dispatch:  # ← 이 줄 추가!
 
 jobs:
   check-volume:
