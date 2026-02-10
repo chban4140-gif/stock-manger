@@ -1,47 +1,37 @@
+import os
+import requests
 import yfinance as yf
 import numpy as np
-import requests
-import os
+from googletrans import Translator
 
-class StockMonitor:
-    def __init__(self, bot_token, chat_id):
-        self.bot_token = bot_token
-        self.chat_id = chat_id
-        self.stocks = ['MSFT', 'NVDA', 'GOOG']
-    
-    def get_stock_volume(self, symbol):
-        try:
-            stock_data = yf.Ticker(symbol)
-            volume = stock_data.info.get('volume', 0)
-            avg_volume = stock_data.info.get('averageVolume', 1)
-            return volume, avg_volume
-        except Exception as e:
-            print(f'Error getting volume for {symbol}: {e}')
-            return 0, 1
-    
-    def send_telegram_message(self, message):
-        url = f'https://api.telegram.org/bot{self.bot_token}/sendMessage'
-        data = {'chat_id': self.chat_id, 'text': message}
-        try:
-            requests.post(url, data=data)
-            print(f'Message sent: {message}')
-        except Exception as e:
-            print(f'Error sending message: {e}')
-    
-    def monitor(self):
-        for stock in self.stocks:
-            volume, avg_volume = self.get_stock_volume(stock)
-            if volume > avg_volume * 1.5:
-                message = f'🚨 {stock}: Volume surge detected!\nCurrent: {volume:,.0f}\nAverage: {avg_volume:,.0f}'
-                self.send_telegram_message(message)
-                print(f'{stock} alert sent!')
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+translator = Translator()
 
-if __name__ == '__main__':
-    bot_token = os.getenv('BOT_TOKEN')
-    chat_id = os.getenv('CHAT_ID')
+def send_telegram_message(message):
+    # 한국어 번역
+    translated = translator.translate(message, dest='ko').text
     
-    if bot_token and chat_id:
-        monitor = StockMonitor(bot_token, chat_id)
-        monitor.monitor()
-    else:
-        print('BOT_TOKEN or CHAT_ID not set!')
+    # 영어 + 한국어 둘 다 보내기
+    combined_message = f"{message}\n\n(번역) {translated}"
+    
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    resp = requests.post(url, data={"chat_id": CHAT_ID, "text": combined_message})
+    print(resp.json())  # 디버깅용
+
+def check_volume_alert(ticker):
+    stock = yf.Ticker(ticker)
+    hist = stock.history(period="1mo")
+    avg_volume = np.mean(hist['Volume'])
+    latest_volume = hist['Volume'][-1]
+    
+    if latest_volume > 1.5 * avg_volume:
+        message = f"🔔 {ticker} trading volume spike! (Current: {latest_volume}, Average: {avg_volume})"
+        send_telegram_message(message)
+
+def main():
+    for t in ["MSFT", "NVDA", "GOOG"]:
+        check_volume_alert(t)
+
+if __name__ == "__main__":
+    main()
